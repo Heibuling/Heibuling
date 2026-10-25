@@ -1,0 +1,26 @@
+# ===== 构建产物 =====
+.gradle/
+build/
+app/build/
+*.apk
+!releases/*.apk
+
+# ===== IDE =====
+.idea/
+*.iml
+.DS_Store
+
+# ===== 本地配置与密钥（绝对不要提交）=====
+local.properties
+keystore.properties
+*.jks
+*.keystore
+签名信息_务必备份.txt
+
+# ===== 便携工具链（JDK/SDK/Gradle，约 2GB）=====
+tools/
+
+# ===== 临时文件 =====
+setup_log*.txt
+build*.txt
+*.tmp
