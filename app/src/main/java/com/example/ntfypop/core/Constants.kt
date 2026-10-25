@@ -14,6 +14,10 @@ object Constants {
 
     // ---- 弹框 ----
     const val BUBBLE_DURATION_MS = 5000L
+    /** 图片/涂鸦：多给一点时间看清楚 */
+    const val MEDIA_BUBBLE_DURATION_MS = 9000L
+    /** 语音：必须留够点播放的时间（实测 5 秒根本来不及） */
+    const val VOICE_BUBBLE_DURATION_MS = 20000L
     const val ENTER_ANIM_MS = 220
     const val EXIT_ANIM_MS = 180
     const val BUBBLE_MAX_HEIGHT_RATIO = 0.40f

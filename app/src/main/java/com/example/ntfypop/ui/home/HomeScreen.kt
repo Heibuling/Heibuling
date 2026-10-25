@@ -90,6 +90,7 @@ fun HomeScreen(onOpenChat: (Peer) -> Unit) {
     var renameText by remember { mutableStateOf("") }
     var showDebug by remember { mutableStateOf(false) }
     var showInvitePicker by remember { mutableStateOf(false) }
+    var pendingToDelete by remember { mutableStateOf<String?>(null) }
     var showDev by remember { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<Peer?>(null) }
     val ballShowing by BallController.showing.collectAsState()
@@ -466,7 +467,7 @@ fun HomeScreen(onOpenChat: (Peer) -> Unit) {
                                 )
                             }) { Text("查看") }
                             TextButton(onClick = {
-                                scope.launch { store.removePendingInvite(p.topic) }
+                                pendingToDelete = p.topic
                             }) { Text("删除") }
                         }
                     }
@@ -519,6 +520,28 @@ fun HomeScreen(onOpenChat: (Peer) -> Unit) {
                 }) { Text("复制") }
             },
             dismissButton = { TextButton(onClick = { showDebug = false }) { Text("关闭") } },
+        )
+    }
+
+    pendingToDelete?.let { topic ->
+        AlertDialog(
+            onDismissRequest = { pendingToDelete = null },
+            title = { Text("删除这个邀请？") },
+            text = {
+                Text(
+                    text = "如果对方已经用这个邀请码配对过，删除后你将收不到他的消息，" +
+                        "必须重新生成邀请码让他再配对一次。",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingToDelete = null
+                    scope.launch { store.removePendingInvite(topic) }
+                    status = "已删除该邀请"
+                }) { Text("删除") }
+            },
+            dismissButton = { TextButton(onClick = { pendingToDelete = null }) { Text("取消") } },
         )
     }
 

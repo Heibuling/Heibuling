@@ -50,10 +50,18 @@ class LinkService : Service() {
         settings = SettingsStore(applicationContext)
         store = Store.get(applicationContext)
         // 必须在 5 秒内完成 startForeground
-        val notif = NotificationFactory.persistent(this, "我", false)
+        val notif = NotificationFactory.starting(this)
         val type = if (Build.VERSION.SDK_INT >= 34) ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE else 0
         ServiceCompat.startForeground(this, Constants.NOTIF_ID_PERSISTENT, notif, type)
         NotificationFactory.onServiceStarted()
+        // 立刻用真实昵称刷新一次通知（不要用占位名，否则会污染问候语缓存）
+        scope.launch {
+            try {
+                val id = settings.ensureInitialized()
+                updateNotification(id.name, false)
+            } catch (e: Exception) {
+            }
+        }
         startLoop()
     }
 
@@ -119,7 +127,8 @@ class LinkService : Service() {
                         attempt = 0
                         DiagState.update(topic) {
                             it.copy(
-                                connected = it.connected || msg.event == NtfyMessage.EVENT_OPEN,
+                                connected = it.connected || msg.event == NtfyMessage.EVENT_OPEN ||
+                                    msg.event == NtfyMessage.EVENT_KEEPALIVE,
                                 attempts = 0,
                                 lastEventAt = System.currentTimeMillis(),
                                 lastEvent = msg.event,
@@ -258,6 +267,12 @@ class LinkService : Service() {
                             voiceDurationMs = env.blob?.dur ?: 0L,
                             voicePeaks = env.blob?.peaks ?: emptyList(),
                             doodleStrokes = inlineDoodle,
+                            // 语音留 20 秒（够点播放），图片/涂鸦 9 秒，文字 5 秒
+                            durationMs = when {
+                                isVoice -> Constants.VOICE_BUBBLE_DURATION_MS
+                                isImage || isDoodle -> Constants.MEDIA_BUBBLE_DURATION_MS
+                                else -> Constants.BUBBLE_DURATION_MS
+                            },
                             onShown = {
                                 NotificationFactory.onBubbleShown()
                                 sendAck(client, topic, id.uid, env, Envelope.STATE_DELIVERED)

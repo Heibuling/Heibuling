@@ -174,7 +174,7 @@ fun DevModeScreen(onClose: () -> Unit) {
                 topics.values.forEach { t ->
                     val color = if (t.connected) Color(0xFF34D399) else Color(0xFFEF4444)
                     Text(
-                        text = (if (t.connected) "● 已连接  " else "○ 未连接  ") + t.topic.take(12) + "…",
+                        text = (if (t.connected) "● 已连接  " else "○ 未连接  ") + t.topic,
                         fontSize = 12.sp,
                         color = color,
                     )
@@ -202,7 +202,7 @@ fun DevModeScreen(onClose: () -> Unit) {
                 peers.forEach { p ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = p.remoteName + "  →  " + p.topic.take(14) + "…",
+                            text = p.remoteName + "  →  " + p.topic,
                             fontSize = 12.sp,
                             modifier = Modifier.weight(1f),
                         )
@@ -214,7 +214,7 @@ fun DevModeScreen(onClose: () -> Unit) {
                 if (pending.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(4.dp))
                     Text("待对方加入（" + pending.size + "）", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                    pending.forEach { Text(it.topic.take(14) + "…", fontSize = 12.sp) }
+                    pending.forEach { Text(it.topic, fontSize = 12.sp) }
                 }
             }
         }

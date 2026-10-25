@@ -14,6 +14,7 @@ import androidx.lifecycle.setViewTreeViewModelStoreOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.example.ntfypop.core.Constants
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -39,6 +40,7 @@ object OverlayController {
     val current: StateFlow<OverlayItem?> = _current
 
     private var pending: CompletableDeferred<Boolean>? = null
+    private var timeoutJob: Job? = null
     private var wm: WindowManager? = null
     private var owner: OverlayLifecycleOwner? = null
     private var view: ComposeView? = null
@@ -100,6 +102,16 @@ object OverlayController {
         queuePaused = paused
     }
 
+    /** 用户点播放等交互时，把当前气泡的自动消失时间往后推。 */
+    fun extendCurrent(extraMs: Long) {
+        val d = pending ?: return
+        timeoutJob?.cancel()
+        timeoutJob = scope.launch {
+            delay(extraMs)
+            if (d.isActive) d.complete(false)
+        }
+    }
+
     fun dismissCurrent() {
         pending?.complete(true)
     }
@@ -134,7 +146,15 @@ object OverlayController {
         view?.let { awaitFirstFrame(it) }
         Log.i(Constants.LOG_TAG, "气泡已显示: " + item.sender)
         item.onShown()
-        val manual = withTimeoutOrNull(Constants.BUBBLE_DURATION_MS) { d.await() } ?: false
+        // 自动消失：用可取消的定时任务实现，方便用户点「播放」时顺延
+        timeoutJob?.cancel()
+        timeoutJob = scope.launch {
+            delay(item.durationMs)
+            if (d.isActive) d.complete(false)
+        }
+        val manual = d.await()
+        timeoutJob?.cancel()
+        timeoutJob = null
         _current.value = null
         delay(Constants.EXIT_ANIM_MS.toLong())
         pending = null

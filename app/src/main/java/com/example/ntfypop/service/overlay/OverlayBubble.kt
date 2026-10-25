@@ -58,6 +58,7 @@ fun OverlayHost() {
             voiceDurationMs = cur.voiceDurationMs,
             voicePeaks = cur.voicePeaks,
             doodleStrokes = cur.doodleStrokes,
+            durationMs = cur.durationMs,
             onTap = { OverlayController.dismissCurrent() },
         )
     }
@@ -72,16 +73,20 @@ fun OverlayBubble(
     voiceDurationMs: Long = 0L,
     voicePeaks: List<Float> = emptyList(),
     doodleStrokes: List<com.example.ntfypop.media.DoodleStroke> = emptyList(),
+    durationMs: Long = Constants.BUBBLE_DURATION_MS,
     onTap: () -> Unit,
 ) {
     var visible by remember { mutableStateOf(false) }
+    var playing by remember { mutableStateOf(false) }
     val progress = remember { Animatable(0f) }
 
-    LaunchedEffect(Unit) {
+    // 进度条与停留时长一致；点播放时会顺延，所以把 playing 也作为 key 重启动画
+    LaunchedEffect(durationMs, playing) {
         visible = true
+        progress.snapTo(0f)
         progress.animateTo(
             targetValue = 1f,
-            animationSpec = tween(Constants.BUBBLE_DURATION_MS.toInt(), easing = LinearEasing),
+            animationSpec = tween(durationMs.toInt(), easing = LinearEasing),
         )
     }
 
@@ -132,8 +137,6 @@ fun OverlayBubble(
                     }
                 }
                 if (voicePath != null) {
-                    val context = androidx.compose.ui.platform.LocalContext.current
-                    var playing by remember { mutableStateOf(false) }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             modifier = Modifier
@@ -146,6 +149,8 @@ fun OverlayBubble(
                                         playing = false
                                     } else {
                                         playing = true
+                                        // 点播放时把气泡的消失时间往后推，避免听到一半就消失
+                                        OverlayController.extendCurrent(durationMs)
                                         com.example.ntfypop.media.VoicePlayer.play(voicePath) { playing = false }
                                     }
                                 },

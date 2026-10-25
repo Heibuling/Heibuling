@@ -10,6 +10,8 @@ data class OverlayItem(
     val voiceDurationMs: Long = 0L,
     val voicePeaks: List<Float> = emptyList(),
     val doodleStrokes: List<com.example.ntfypop.media.DoodleStroke> = emptyList(),
+    /** 这条气泡停留多久（语音给得更长，因为要留时间点播放） */
+    val durationMs: Long = com.example.ntfypop.core.Constants.BUBBLE_DURATION_MS,
     val onShown: () -> Unit,
     val onClosed: (manual: Boolean) -> Unit,
 )

@@ -23,7 +23,9 @@ object NotificationFactory {
     private const val NOTIF_ID_ACK = 1002
     private const val NOTIF_ID_FALLBACK = 1003
 
-    private var lastHour = -1L
+    // 缓存键必须同时包含「小时 + 昵称」：只按小时缓存会导致服务启动时用占位名算出的问候语
+    // 在整个小时内一直生效（实测表现为通知里永远显示「早上好，我」而不是用户昵称）
+    private var lastKey = ""
     private var cachedTitle = ""
     private val recent = ArrayDeque<String>()
 
@@ -47,6 +49,21 @@ object NotificationFactory {
             day = d
             bubblesToday = 0
         }
+    }
+
+    /** 服务刚起来、还没读到昵称时的中性文案。 */
+    fun starting(context: Context): Notification {
+        ensureChannels(context)
+        return NotificationCompat.Builder(context, Constants.NOTIF_CHANNEL_PERSISTENT)
+            .setSmallIcon(android.R.drawable.stat_notify_chat)
+            .setContentTitle("Heibuling 正在启动…")
+            .setContentText("马上就好")
+            .setOngoing(true)
+            .setShowWhen(false)
+            .setOnlyAlertOnce(true)
+            .setSilent(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .build()
     }
 
     fun ensureChannels(context: Context) {
@@ -142,8 +159,8 @@ object NotificationFactory {
     /** 主问候：同一小时内稳定，最近 8 条不重复，深夜只用安静组，约 30% 概率叠加真实数据彩蛋。 */
     fun greeting(name: String): String {
         val now = System.currentTimeMillis()
-        val hour = now / 3_600_000L
-        if (hour == lastHour && cachedTitle.isNotEmpty()) return cachedTitle
+        val key = (now / 3_600_000L).toString() + "|" + name
+        if (key == lastKey && cachedTitle.isNotEmpty()) return cachedTitle
 
         val pool = poolFor(Calendar.getInstance().get(Calendar.HOUR_OF_DAY), name)
         val fresh = pool.filterNot { recent.contains(it) }
@@ -153,7 +170,7 @@ object NotificationFactory {
 
         val withEgg = maybeEgg(name)?.let { pick + "　" + it } ?: pick
         cachedTitle = if (withEgg.length <= 44) withEgg else pick
-        lastHour = hour
+        lastKey = key
         return cachedTitle
     }
 
