@@ -1,5 +1,7 @@
 # Heibuling
 
+> 仓库：https://github.com/Heibuling/Heibuling ・ 发布页：https://github.com/Heibuling/Heibuling/releases
+
 几个人之间用的"弹幕式"消息 App：你输入文字 / 表情 / 图片 / 语音 / 涂鸦，对方手机**屏幕顶部会弹出一条半透明的玻璃气泡**，
 约 5 秒后自动消失。反向亦然。不是聊天软件，而是一个"轻打扰的即时表情传递器"。
 
@@ -41,6 +43,13 @@
 | 悬浮窗与气泡 | `.../service/overlay/` |
 | 通知与常驻文案池 | `.../service/NotificationFactory.kt` |
 | 本地存储（轻量 JSON，原子写入） | `.../data/local/Store.kt` |
+
+## 本机网络说明（重要）
+
+这台机器的 hosts 文件里有一段被某 App 写入的 GitHub 屏蔽规则（26 个域名指向 127.0.0.1），会让 git push 与 Release 上传全部失败。
+
+1. 临时绕过（已配置，无需管理员）：本仓库 .git/config 里已写入 http.curloptResolve，git 直连真实 IP；失效时执行 ./scripts/refresh-github-ip.ps1
+2. 彻底修复（需管理员）：管理员 PowerShell 删掉 hosts 里所有含 github 的行，再 ipconfig /flushdns
 
 ## 构建
 
