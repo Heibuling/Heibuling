@@ -60,6 +60,9 @@ import com.example.ntfypop.data.local.Peer
 import com.example.ntfypop.data.local.Store
 import com.example.ntfypop.data.prefs.Identity
 import com.example.ntfypop.data.prefs.SettingsStore
+import androidx.compose.material3.LinearProgressIndicator
+import com.example.ntfypop.data.UpdateChecker
+import com.example.ntfypop.data.UpdateInfo
 import com.example.ntfypop.data.remote.Pairing
 import com.example.ntfypop.domain.EnvelopeCodec
 import com.example.ntfypop.service.LinkService
@@ -69,6 +72,7 @@ import com.example.ntfypop.ui.components.GlassSectionTitle
 import com.example.ntfypop.ui.dev.DevModeScreen
 import com.example.ntfypop.ui.components.GlassSurface
 import com.example.ntfypop.ui.components.glassBrush
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 @Composable
@@ -91,6 +95,13 @@ fun HomeScreen(onOpenChat: (Peer) -> Unit) {
     var showDebug by remember { mutableStateOf(false) }
     var showInvitePicker by remember { mutableStateOf(false) }
     var pendingToDelete by remember { mutableStateOf<String?>(null) }
+    var updateInfo by remember { mutableStateOf<UpdateInfo?>(null) }
+    var checkingUpdate by remember { mutableStateOf(false) }
+    var downloadingUpdate by remember { mutableStateOf(false) }
+    var updateProgress by remember { mutableStateOf(0f) }
+    var updateError by remember { mutableStateOf("") }
+    var showUpdateDialog by remember { mutableStateOf(false) }
+    val myVersionName = remember { UpdateChecker.currentVersionName(context) }
     var showDev by remember { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<Peer?>(null) }
     val ballShowing by BallController.showing.collectAsState()
@@ -104,6 +115,17 @@ fun HomeScreen(onOpenChat: (Peer) -> Unit) {
         identity = settings.ensureInitialized()
         LinkService.start(context)
         if (OverlayController.canDraw(context)) BallController.show(context, settings)
+        // 每 24 小时自动检查一次更新（手动点「检查更新」可随时触发）
+        val last = settings.lastUpdateCheck.first()
+        if (System.currentTimeMillis() - last > 24L * 3600L * 1000L) {
+            val info = try {
+                UpdateChecker.check(context)
+            } catch (e: Exception) {
+                null
+            }
+            settings.setLastUpdateCheck(System.currentTimeMillis())
+            if (info != null) updateInfo = info
+        }
     }
 
     DisposableEffect(lifecycleOwner) {
@@ -229,6 +251,57 @@ fun HomeScreen(onOpenChat: (Peer) -> Unit) {
                             status = "已开启悬浮球"
                         }
                     }) { Text(if (ballShowing) "关闭" else "开启") }
+                }
+            }
+
+            // 版本与更新
+            GlassSurface(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = if (updateInfo != null) "发现新版本 v" + updateInfo?.versionName else "Heibuling v" + myVersionName,
+                            color = Color.White,
+                            fontWeight = FontWeight.Medium,
+                        )
+                        Text(
+                            text = when {
+                                checkingUpdate -> "正在检查更新…"
+                                updateInfo != null -> "点右侧按钮即可应用内下载安装"
+                                else -> "已是最新版本"
+                            },
+                            color = Color.White.copy(alpha = 0.45f),
+                            fontSize = 12.sp,
+                        )
+                    }
+                    TextButton(
+                        onClick = {
+                            if (updateInfo != null) {
+                                showUpdateDialog = true
+                            } else {
+                                scope.launch {
+                                    checkingUpdate = true
+                                    status = ""
+                                    val info = try {
+                                        UpdateChecker.check(context)
+                                    } catch (e: Exception) {
+                                        null
+                                    }
+                                    checkingUpdate = false
+                                    settings.setLastUpdateCheck(System.currentTimeMillis())
+                                    if (info == null) {
+                                        status = "已经是最新版本"
+                                    } else {
+                                        updateInfo = info
+                                        showUpdateDialog = true
+                                    }
+                                }
+                            }
+                        },
+                        enabled = !checkingUpdate && !downloadingUpdate,
+                    ) { Text(if (updateInfo != null) "更新" else "检查更新") }
                 }
             }
 
@@ -520,6 +593,66 @@ fun HomeScreen(onOpenChat: (Peer) -> Unit) {
                 }) { Text("复制") }
             },
             dismissButton = { TextButton(onClick = { showDebug = false }) { Text("关闭") } },
+        )
+    }
+
+    val info = updateInfo
+    if (showUpdateDialog && info != null) {
+        AlertDialog(
+            onDismissRequest = { if (!downloadingUpdate) showUpdateDialog = false },
+            title = { Text("发现新版本 v" + info.versionName) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (info.notes.isNotBlank()) {
+                        Text(info.notes, style = MaterialTheme.typography.bodySmall)
+                    }
+                    if (downloadingUpdate) {
+                        LinearProgressIndicator(
+                            progress = { updateProgress },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Text(
+                            text = "正在下载 " + (updateProgress * 100).toInt() + "%",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    if (updateError.isNotEmpty()) {
+                        Text(updateError, color = Color(0xFFEF4444), style = MaterialTheme.typography.bodySmall)
+                    }
+                    Text(
+                        text = "安装时系统可能会问一次「允许安装未知应用」，允许后即可覆盖安装（不需要卸载，聊天记录不会丢）。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.5f),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (downloadingUpdate) return@TextButton
+                    scope.launch {
+                        downloadingUpdate = true
+                        updateProgress = 0f
+                        updateError = ""
+                        try {
+                            val apk = UpdateChecker.download(context, info) { updateProgress = it }
+                            downloadingUpdate = false
+                            if (!UpdateChecker.canInstall(context)) {
+                                status = "请先允许 Heibuling 安装应用，再点一次更新"
+                                UpdateChecker.openInstallPermissionSetting(context)
+                            } else {
+                                UpdateChecker.install(context, apk)
+                                showUpdateDialog = false
+                            }
+                        } catch (e: Exception) {
+                            downloadingUpdate = false
+                            updateError = "下载失败：" + e.message
+                        }
+                    }
+                }) { Text(if (downloadingUpdate) "下载中…" else "下载并安装") }
+            },
+            dismissButton = {
+                TextButton(onClick = { if (!downloadingUpdate) showUpdateDialog = false }) { Text("稍后") }
+            },
         )
     }
 

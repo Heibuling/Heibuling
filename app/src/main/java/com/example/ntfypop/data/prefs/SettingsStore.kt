@@ -32,6 +32,7 @@ class SettingsStore(private val context: Context) {
         val NICK_SET = androidx.datastore.preferences.core.booleanPreferencesKey("nickname_set")
         val ROM_BRAND = stringPreferencesKey("rom_brand")
         val ROM_READ = androidx.datastore.preferences.core.booleanPreferencesKey("rom_guide_read")
+        val LAST_UPDATE = androidx.datastore.preferences.core.longPreferencesKey("last_update_check")
     }
 
     val identity: Flow<Identity> = context.dataStore.data.map { it.toIdentity() }
@@ -62,6 +63,12 @@ class SettingsStore(private val context: Context) {
     suspend fun setServerUrl(url: String) {
         if (url.isBlank()) return
         context.dataStore.edit { it[K.SERVER] = url }
+    }
+
+    val lastUpdateCheck: Flow<Long> = context.dataStore.data.map { it[K.LAST_UPDATE] ?: 0L }
+
+    suspend fun setLastUpdateCheck(ts: Long) {
+        context.dataStore.edit { it[K.LAST_UPDATE] = ts }
     }
 
     val romBrand: Flow<String> = context.dataStore.data.map { it[K.ROM_BRAND] ?: "" }
