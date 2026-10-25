@@ -1,6 +1,6 @@
 {
   "versionCode": 8,
-  "versionName": "0.2.5",
-  "apkUrl": "https://github.com/Heibuling/Heibuling/releases/download/v0.2.5/Heibuling-v0.2.5.apk",
-  "notes": "（自更新测试）v0.2.5：新增应用内自更新。"
+  "versionName": "0.2.6",
+  "apkUrl": "https://github.com/Heibuling/Heibuling/releases/download/v0.2.6/Heibuling-v0.2.6.apk",
+  "notes": "v0.2.6：下载器支持断点续传 + 多镜像，慢网络也能装完（实测 99% 被断的情况已修复）。"
 }

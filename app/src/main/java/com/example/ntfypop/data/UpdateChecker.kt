@@ -39,8 +39,23 @@ object UpdateChecker {
     private val versionUrls = listOf(
         "https://raw.githubusercontent.com/" + OWNER_REPO + "/main/docs/version.json",
         "https://gh-proxy.com/https://raw.githubusercontent.com/" + OWNER_REPO + "/main/docs/version.json",
+        "https://ghproxy.net/https://raw.githubusercontent.com/" + OWNER_REPO + "/main/docs/version.json",
         "https://cdn.jsdelivr.net/gh/" + OWNER_REPO + "@main/docs/version.json",
     )
+
+    /** APK 下载镜像前缀（直连慢/被断时依次兜底）。 */
+    private val mirrorPrefixes = listOf(
+        "",
+        "https://gh-proxy.com/",
+        "https://ghproxy.net/",
+        "https://ghfast.top/",
+    )
+
+    /** 下载用的客户端：读超时长一些，慢链路更容易撑住。 */
+    private val downloadHttp = OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
+        .build()
 
     private val http = OkHttpClient.Builder()
         .connectTimeout(12, TimeUnit.SECONDS)
@@ -82,51 +97,69 @@ object UpdateChecker {
         null
     }
 
-    /** 下载 APK（失败时自动走 gh-proxy 镜像）。返回本地文件。 */
+    /**
+     * 下载 APK：**断点续传 + 多镜像 + 同源重试**。
+     * 慢链路（实测约 100KB/s）常常在 99% 处被断开，重头下载几乎不可能成功，
+     * 所以每次重试都尽量带 Range 从已下载的位置继续。
+     */
     suspend fun download(
         context: Context,
         info: UpdateInfo,
-        onProgress: (Float) -> Unit,
+        onProgress: (downloaded: Long, total: Long) -> Unit,
     ): File = withContext(Dispatchers.IO) {
         val dir = File(context.cacheDir, "update").apply { mkdirs() }
         val dest = File(dir, "Heibuling-" + info.versionName + ".apk")
-        if (dest.exists()) dest.delete()
 
-        val attempts = listOf(
-            info.apkUrl,
-            "https://gh-proxy.com/" + info.apkUrl,
-        )
         var lastError: Exception? = null
-        for (url in attempts) {
-            try {
-                val req = Request.Builder().url(url).get().build()
-                http.newCall(req).execute().use { resp ->
-                    if (!resp.isSuccessful) throw IOException("HTTP " + resp.code)
-                    val body = resp.body ?: throw IOException("空响应")
-                    val total = body.contentLength()
-                    body.byteStream().use { input ->
-                        dest.outputStream().use { output ->
-                            val buf = ByteArray(64 * 1024)
-                            var read: Int
-                            var sum = 0L
-                            while (true) {
-                                read = input.read(buf)
-                                if (read <= 0) break
-                                output.write(buf, 0, read)
-                                sum += read
-                                if (total > 0) onProgress((sum.toFloat() / total).coerceIn(0f, 1f))
+        for (prefix in mirrorPrefixes) {
+            val url = prefix + info.apkUrl
+            // 同一来源最多试 3 次，每次都尽量续传
+            for (attempt in 1..3) {
+                try {
+                    var start = if (dest.exists()) dest.length() else 0L
+                    val builder = Request.Builder().url(url).get()
+                    if (start > 0) builder.header("Range", "bytes=" + start + "-")
+                    downloadHttp.newCall(builder.build()).execute().use { resp ->
+                        val resuming = resp.code == 206
+                        if (resp.code == 416) {
+                            // 已经下完了
+                            if (dest.length() > 100 * 1024) return@withContext dest
+                            start = 0L
+                        } else if (!resp.isSuccessful) {
+                            throw IOException("HTTP " + resp.code)
+                        }
+                        if (!resuming) {
+                            start = 0L
+                            if (dest.exists()) dest.delete()
+                        }
+                        val body = resp.body ?: throw IOException("空响应")
+                        val chunk = body.contentLength()
+                        val total = if (chunk > 0) chunk + start else -1L
+                        body.byteStream().use { input ->
+                            java.io.FileOutputStream(dest, resuming).use { output ->
+                                val buf = ByteArray(64 * 1024)
+                                var sum = start
+                                var read = input.read(buf)
+                                while (read > 0) {
+                                    output.write(buf, 0, read)
+                                    sum += read
+                                    onProgress(sum, if (total > 0) total else sum)
+                                    read = input.read(buf)
+                                }
                             }
                         }
                     }
+                    if (dest.length() > 100 * 1024 && (info.apkUrl.isEmpty() || true)) {
+                        return@withContext dest
+                    }
+                    throw IOException("下载不完整")
+                } catch (e: Exception) {
+                    lastError = e
+                    // 注意：这里**不删除**已下载内容，下一次重试才能续传
                 }
-                if (dest.length() < 1024 * 100) throw IOException("下载不完整")
-                return@withContext dest
-            } catch (e: Exception) {
-                lastError = e
-                if (dest.exists()) dest.delete()
             }
         }
-        throw lastError ?: IOException("下载失败")
+        throw lastError ?: IOException("所有下载源都失败了")
     }
 
     /** 是否有"安装未知应用"的权限；没有则跳设置页。 */

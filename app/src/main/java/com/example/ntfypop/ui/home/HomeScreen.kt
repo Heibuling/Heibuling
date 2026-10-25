@@ -99,6 +99,8 @@ fun HomeScreen(onOpenChat: (Peer) -> Unit) {
     var checkingUpdate by remember { mutableStateOf(false) }
     var downloadingUpdate by remember { mutableStateOf(false) }
     var updateProgress by remember { mutableStateOf(0f) }
+    var updateDone by remember { mutableStateOf(0L) }
+    var updateTotal by remember { mutableStateOf(0L) }
     var updateError by remember { mutableStateOf("") }
     var showUpdateDialog by remember { mutableStateOf(false) }
     val myVersionName = remember { UpdateChecker.currentVersionName(context) }
@@ -612,7 +614,9 @@ fun HomeScreen(onOpenChat: (Peer) -> Unit) {
                             modifier = Modifier.fillMaxWidth(),
                         )
                         Text(
-                            text = "正在下载 " + (updateProgress * 100).toInt() + "%",
+                            text = "正在下载 " + (updateDone / 1048576f).let { String.format("%.1f", it) } + " MB / " +
+                                (if (updateTotal > 0) String.format("%.1f", updateTotal / 1048576f) + " MB" else "?") +
+                                "（" + (updateProgress * 100).toInt() + "%）",
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
@@ -634,7 +638,11 @@ fun HomeScreen(onOpenChat: (Peer) -> Unit) {
                         updateProgress = 0f
                         updateError = ""
                         try {
-                            val apk = UpdateChecker.download(context, info) { updateProgress = it }
+                            val apk = UpdateChecker.download(context, info) { done, total ->
+                                updateDone = done
+                                updateTotal = total
+                                updateProgress = if (total > 0) done.toFloat() / total else 0f
+                            }
                             downloadingUpdate = false
                             if (!UpdateChecker.canInstall(context)) {
                                 status = "请先允许 Heibuling 安装应用，再点一次更新"
