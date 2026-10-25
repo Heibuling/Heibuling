@@ -1,6 +1,6 @@
 {
-  "versionCode": 7,
+  "versionCode": 8,
   "versionName": "0.2.5",
   "apkUrl": "https://github.com/Heibuling/Heibuling/releases/download/v0.2.5/Heibuling-v0.2.5.apk",
-  "notes": "v0.2.5：新增应用内自更新（以后不用再手动发安装包）；修复常驻通知显示占位名；语音气泡停留 20 秒且点播放顺延。"
+  "notes": "（自更新测试）v0.2.5：新增应用内自更新。"
 }
