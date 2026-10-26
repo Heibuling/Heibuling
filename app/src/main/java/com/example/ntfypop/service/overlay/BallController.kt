@@ -6,9 +6,12 @@ import android.os.Build
 import android.provider.Settings
 import android.util.Log
 import android.view.Gravity
+import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.ViewConfiguration
 import android.view.WindowManager
+import android.window.OnBackInvokedCallback
+import android.window.OnBackInvokedDispatcher
 import android.view.inputmethod.InputMethodManager
 import androidx.compose.ui.platform.ComposeView
 import androidx.lifecycle.setViewTreeLifecycleOwner
@@ -40,9 +43,14 @@ object BallController {
     private var ballLp: WindowManager.LayoutParams? = null
     private var ballOwner: OverlayLifecycleOwner? = null
 
-    private var panelView: ComposeView? = null
+    private var panelView: BackKeyComposeView? = null
     private var panelOwner: OverlayLifecycleOwner? = null
     private var open = false
+    private var backCallback: OnBackInvokedCallback? = null
+
+    private val _panelOpen = kotlinx.coroutines.flow.MutableStateFlow(false)
+    /** 面板是否展开（供 Activity 拦截返回键用） */
+    val panelOpen: kotlinx.coroutines.flow.StateFlow<Boolean> = _panelOpen
 
     private val _showing = kotlinx.coroutines.flow.MutableStateFlow(false)
     val showing: kotlinx.coroutines.flow.StateFlow<Boolean> = _showing
@@ -218,11 +226,11 @@ object BallController {
         if (open) return
         try {
             val owner = OverlayLifecycleOwner().also { it.onStart() }
-            val view = ComposeView(ctx).apply {
+            val view = BackKeyComposeView(ctx, onBack = { closePanel() }).apply {
                 setViewTreeLifecycleOwner(owner)
                 setViewTreeViewModelStoreOwner(owner)
                 setViewTreeSavedStateRegistryOwner(owner)
-                setContent { BallInputPanel(onClose = { closePanel() }) }
+                setPanelContent { BallInputPanel(onClose = { closePanel() }) }
             }
             val manager = wm ?: return
             val width = dp(ctx, 300)
@@ -247,8 +255,46 @@ object BallController {
             panelView = view
             panelOwner = owner
             open = true
+            _panelOpen.value = true
             OverlayController.pauseQueue(true)
 
+            // Android 16 的预测性返回由系统分发器处理，覆盖窗口收不到 BACK 键。
+            // 但"按返回"的第一下一定会收起键盘 —— 所以监听键盘收起，顺手把面板一起收起。
+            val imeState = booleanArrayOf(false)
+            view.setOnApplyWindowInsetsListener { v, insets ->
+                val imeBottom = if (Build.VERSION.SDK_INT >= 30) {
+                    insets.getInsets(android.view.WindowInsets.Type.ime()).bottom
+                } else {
+                    0
+                }
+                if (imeBottom > 0) {
+                    imeState[0] = true
+                } else if (imeState[0]) {
+                    imeState[0] = false
+                    Log.i(Constants.LOG_TAG, "键盘已收起，自动收起输入面板")
+                    closePanel()
+                }
+                v.onApplyWindowInsets(insets)
+                insets
+            }
+            // 正式做法：覆盖窗口也要在 Android 13+ 的返回分发器上注册回调，
+            // 否则侧滑返回/返回键会被系统吃掉（预测性返回），面板收不到任何按键事件
+            if (Build.VERSION.SDK_INT >= 33) {
+                try {
+                    val dispatcher = view.findOnBackInvokedDispatcher()
+                    if (dispatcher != null) {
+                        val cb = OnBackInvokedCallback { closePanel() }
+                        dispatcher.registerOnBackInvokedCallback(
+                            OnBackInvokedDispatcher.PRIORITY_DEFAULT,
+                            cb,
+                        )
+                        backCallback = cb
+                        Log.i(Constants.LOG_TAG, "已在返回分发器上注册面板收起回调")
+                    }
+                } catch (e: Exception) {
+                    Log.w(Constants.LOG_TAG, "注册返回回调失败: " + e.message)
+                }
+            }
             view.requestFocus()
             view.postDelayed({
                 try {
@@ -267,7 +313,16 @@ object BallController {
 
     fun closePanel() {
         if (!open) return
+        backCallback?.let { cb ->
+            try {
+                if (Build.VERSION.SDK_INT >= 33) panelView?.findOnBackInvokedDispatcher()?.unregisterOnBackInvokedCallback(cb)
+            } catch (e: Exception) {
+            }
+        }
+        backCallback = null
         open = false
+        _panelOpen.value = false
+        Log.i(Constants.LOG_TAG, "面板已收起（状态已记录）")
         OverlayController.pauseQueue(false)
         val v = panelView
         if (v != null) {

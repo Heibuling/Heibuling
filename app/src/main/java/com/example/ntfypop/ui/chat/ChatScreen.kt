@@ -17,7 +17,14 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -57,6 +64,9 @@ import com.example.ntfypop.ui.components.GlassSurface
 import com.example.ntfypop.ui.components.GlassTextField
 import com.example.ntfypop.ui.components.glassBrush
 import com.example.ntfypop.ui.doodle.DoodleScreen
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlinx.coroutines.launch
 
 @Composable
@@ -156,7 +166,10 @@ fun ChatScreen(peer: Peer, onBack: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .safeDrawingPadding()
+            // Android 15+ 强制边到边：窗口不会被键盘 resize，必须自己加键盘内边距。
+            // 用 navigationBars ∪ ime 取并集（不是相加），既覆盖键盘也不会重复叠加导航栏
+            .statusBarsPadding()
+            .windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime))
             .background(
                 Brush.verticalGradient(
                     0f to Color(0xFF0A0C12),
@@ -284,11 +297,11 @@ fun ChatScreen(peer: Peer, onBack: () -> Unit) {
         ) {
             DoodleScreen(
                 onCancel = { showDoodle = false },
-                onSend = { strokes ->
+                onSend = { strokes, canvasW, canvasH ->
                     showDoodle = false
                     scope.launch {
                         try {
-                            repo.sendDoodle(peer, strokes)
+                            repo.sendDoodle(peer, strokes, canvasW, canvasH)
                             status = ""
                         } catch (e: Exception) {
                             status = "涂鸦发送失败：" + e.message
@@ -315,14 +328,17 @@ private fun MessageRow(m: MessageRec) {
                     color = Color.White,
                 )
             }
-            if (m.outgoing) {
-                Text(
-                    text = stateLabel(m.state),
-                    fontSize = 10.sp,
-                    color = Color.White.copy(alpha = 0.55f),
-                    modifier = Modifier.padding(top = 2.dp),
-                )
-            }
+            // 每条消息都显示发送时间；自己发的再加送达状态
+            Text(
+                text = if (m.outgoing) {
+                    formatTime(m.ts) + "  ·  " + stateLabel(m.state)
+                } else {
+                    formatTime(m.ts)
+                },
+                fontSize = 10.sp,
+                color = Color.White.copy(alpha = 0.5f),
+                modifier = Modifier.padding(top = 2.dp, start = 2.dp, end = 2.dp),
+            )
         }
     }
 }
@@ -334,4 +350,10 @@ private fun stateLabel(state: String): String = when (state) {
     MessageRec.STATE_DISMISSED -> "已查看 ✓✓"
     MessageRec.STATE_FAILED -> "发送失败"
     else -> state
+}
+
+private fun formatTime(ts: Long): String {
+    if (ts <= 0L) return ""
+    val fmt = SimpleDateFormat("HH:mm", Locale.getDefault())
+    return fmt.format(Date(ts))
 }

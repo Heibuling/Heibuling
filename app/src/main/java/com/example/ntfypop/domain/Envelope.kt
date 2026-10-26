@@ -20,6 +20,9 @@ data class Envelope(
     val text: String = "",
     val blob: Blob? = null,
     val strokes: String = "",
+    /** 涂鸦画布宽高（像素）：回放时按这个比例显示，否则会被压扁 */
+    val doodleW: Int = 0,
+    val doodleH: Int = 0,
     val ref: String = "",
     val state: String = "",
 ) {

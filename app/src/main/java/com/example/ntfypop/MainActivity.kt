@@ -18,6 +18,10 @@ import androidx.compose.ui.platform.LocalContext
 import com.example.ntfypop.data.local.Peer
 import com.example.ntfypop.data.prefs.SettingsStore
 import com.example.ntfypop.ui.chat.ChatScreen
+import androidx.activity.compose.BackHandler
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import com.example.ntfypop.service.overlay.BallController
 import com.example.ntfypop.ui.home.HomeScreen
 import com.example.ntfypop.ui.onboarding.NicknameScreen
 import com.example.ntfypop.ui.onboarding.PermissionWizard
@@ -28,6 +32,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
+            // 悬浮球输入面板展开时，返回键/侧滑返回只收起面板，不退出当前页面
+            val panelOpen by BallController.panelOpen.collectAsState()
+            BackHandler(enabled = panelOpen) { BallController.closePanel() }
             NtfyPopTheme {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     AppNav()

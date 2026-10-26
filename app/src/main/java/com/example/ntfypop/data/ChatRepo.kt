@@ -146,7 +146,12 @@ class ChatRepo(
     }
 
     /** 发送涂鸦：体积小就内联在信封里，超过 3.5KB 则上传成 .json 附件。 */
-    suspend fun sendDoodle(peer: Peer, strokes: List<com.example.ntfypop.media.DoodleStroke>): MessageRec {
+    suspend fun sendDoodle(
+        peer: Peer,
+        strokes: List<com.example.ntfypop.media.DoodleStroke>,
+        canvasW: Int = 0,
+        canvasH: Int = 0,
+    ): MessageRec {
         val self = settings.ensureInitialized()
         val mid = EnvelopeCodec.newMid()
         val rec = MessageRec(
@@ -188,6 +193,8 @@ class ChatRepo(
                 kind = Envelope.KIND_DOODLE,
                 text = "",
                 strokes = inline,
+                doodleW = canvasW,
+                doodleH = canvasH,
                 blob = blob,
                 ref = ref,
             )

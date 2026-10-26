@@ -53,11 +53,14 @@ fun OverlayHost() {
         OverlayBubble(
             sender = cur.sender,
             text = cur.text,
+            ts = cur.ts,
             imagePath = cur.imagePath,
             voicePath = cur.voicePath,
             voiceDurationMs = cur.voiceDurationMs,
             voicePeaks = cur.voicePeaks,
             doodleStrokes = cur.doodleStrokes,
+            doodleW = cur.doodleW,
+            doodleH = cur.doodleH,
             durationMs = cur.durationMs,
             onTap = { OverlayController.dismissCurrent() },
         )
@@ -68,11 +71,14 @@ fun OverlayHost() {
 fun OverlayBubble(
     sender: String,
     text: String,
+    ts: Long = 0L,
     imagePath: String? = null,
     voicePath: String? = null,
     voiceDurationMs: Long = 0L,
     voicePeaks: List<Float> = emptyList(),
     doodleStrokes: List<com.example.ntfypop.media.DoodleStroke> = emptyList(),
+    doodleW: Int = 0,
+    doodleH: Int = 0,
     durationMs: Long = Constants.BUBBLE_DURATION_MS,
     onTap: () -> Unit,
 ) {
@@ -115,7 +121,14 @@ fun OverlayBubble(
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Medium,
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
+                    if (ts > 0L) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = overlayTime(ts),
+                            color = Color.White.copy(alpha = 0.45f),
+                            fontSize = 11.sp,
+                        )
+                    }
                     Spacer(modifier = Modifier.weight(1f))
                     Text(
                         text = "×",
@@ -195,9 +208,30 @@ fun OverlayBubble(
                         t.snapTo(0f)
                         t.animateTo(raw.toFloat(), animationSpec = tween(playMs, easing = LinearEasing))
                     }
-                    androidx.compose.foundation.Canvas(
-                        modifier = Modifier.fillMaxWidth().height(170.dp),
+                    // 按涂鸦原始宽高比显示（否则会被压扁）；高度上限 260dp，超出则同时缩小宽度以保持比例
+                    androidx.compose.foundation.layout.BoxWithConstraints(
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
+                        val ar = if (doodleW > 0 && doodleH > 0) {
+                            doodleW.toFloat() / doodleH.toFloat()
+                        } else {
+                            0.72f
+                        }
+                        val maxH = 260.dp
+                        var boxH = maxWidth / ar
+                        var boxW = maxWidth
+                        if (boxH > maxH) {
+                            boxH = maxH
+                            boxW = maxH * ar
+                        }
+                        android.util.Log.i(
+                            "Heibuling",
+                            "涂鸦画布 maxWidth=" + maxWidth + " ar=" + ar + " boxW=" + boxW + " boxH=" + boxH +
+                                " doodleW=" + doodleW + " doodleH=" + doodleH,
+                        )
+                        androidx.compose.foundation.Canvas(
+                            modifier = Modifier.size(boxW, boxH),
+                        ) {
                         doodleStrokes.forEach { s ->
                             val dur = (s.t1 - s.t0).coerceAtLeast(1)
                             val frac = ((t.value - s.t0) / dur).coerceIn(0f, 1f)
@@ -224,6 +258,7 @@ fun OverlayBubble(
                                 }
                             }
                         }
+                    }
                     }
                     Spacer(modifier = Modifier.height(6.dp))
                 }
@@ -257,4 +292,12 @@ private fun parseColor(hex: String): Color = try {
     Color(android.graphics.Color.parseColor(hex))
 } catch (e: Exception) {
     Color.White
+}
+
+private fun overlayTime(ts: Long): String {
+    return try {
+        java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(ts))
+    } catch (e: Exception) {
+        ""
+    }
 }

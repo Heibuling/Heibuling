@@ -116,7 +116,10 @@ fun HomeScreen(onOpenChat: (Peer) -> Unit) {
         store.load()
         identity = settings.ensureInitialized()
         LinkService.start(context)
-        if (OverlayController.canDraw(context)) BallController.show(context, settings)
+        // 只有用户没关过悬浮球时才自动打开（否则会出现"关掉后一进页面又被强制打开"）
+        if (OverlayController.canDraw(context) && settings.ballEnabled.first()) {
+            BallController.show(context, settings)
+        }
         // 每 24 小时自动检查一次更新（手动点「检查更新」可随时触发）
         val last = settings.lastUpdateCheck.first()
         if (System.currentTimeMillis() - last > 24L * 3600L * 1000L) {
@@ -245,11 +248,14 @@ fun HomeScreen(onOpenChat: (Peer) -> Unit) {
                         )
                     }
                     TextButton(onClick = {
+                        android.util.Log.i("Heibuling", "点击悬浮球开关 ballShowing=" + ballShowing)
                         if (ballShowing) {
                             BallController.hide()
-                            status = "已关闭悬浮球"
+                            scope.launch { settings.setBallEnabled(false) }
+                            status = "已关闭悬浮球（下次进 App 不会自动打开）"
                         } else {
                             BallController.show(context, settings)
+                            scope.launch { settings.setBallEnabled(true) }
                             status = "已开启悬浮球"
                         }
                     }) { Text(if (ballShowing) "关闭" else "开启") }

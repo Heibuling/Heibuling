@@ -33,6 +33,8 @@ class SettingsStore(private val context: Context) {
         val ROM_BRAND = stringPreferencesKey("rom_brand")
         val ROM_READ = androidx.datastore.preferences.core.booleanPreferencesKey("rom_guide_read")
         val LAST_UPDATE = androidx.datastore.preferences.core.longPreferencesKey("last_update_check")
+        val BALL_ENABLED = androidx.datastore.preferences.core.booleanPreferencesKey("ball_enabled")
+        val LAST_PEER = stringPreferencesKey("last_peer_uid")
     }
 
     val identity: Flow<Identity> = context.dataStore.data.map { it.toIdentity() }
@@ -63,6 +65,20 @@ class SettingsStore(private val context: Context) {
     suspend fun setServerUrl(url: String) {
         if (url.isBlank()) return
         context.dataStore.edit { it[K.SERVER] = url }
+    }
+
+    /** 悬浮球是否由用户开启过（默认开），用于避免"关掉后一进页面又被自动打开" */
+    val ballEnabled: Flow<Boolean> = context.dataStore.data.map { it[K.BALL_ENABLED] ?: true }
+
+    suspend fun setBallEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[K.BALL_ENABLED] = enabled }
+    }
+
+    /** 悬浮球上次发送给谁，下次展开时默认选中它 */
+    val lastPeerUid: Flow<String> = context.dataStore.data.map { it[K.LAST_PEER] ?: "" }
+
+    suspend fun setLastPeerUid(uid: String) {
+        context.dataStore.edit { it[K.LAST_PEER] = uid }
     }
 
     val lastUpdateCheck: Flow<Long> = context.dataStore.data.map { it[K.LAST_UPDATE] ?: 0L }

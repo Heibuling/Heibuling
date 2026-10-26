@@ -54,7 +54,10 @@ private val WIDTHS = listOf(3f, 6f, 12f)
  * 注意：这里的坐标按画布宽高归一化（0..1），笔宽按画布宽归一化，保证不同分辨率一致。
  */
 @Composable
-fun DoodleScreen(onCancel: () -> Unit, onSend: (List<DoodleStroke>) -> Unit) {
+fun DoodleScreen(
+    onCancel: () -> Unit,
+    onSend: (strokes: List<DoodleStroke>, canvasW: Int, canvasH: Int) -> Unit,
+) {
     val strokes = remember { mutableStateListOf<DoodleStroke>() }
     var color by remember { mutableStateOf(PALETTE[0]) }
     var widthPx by remember { mutableStateOf(WIDTHS[1]) }
@@ -175,7 +178,7 @@ fun DoodleScreen(onCancel: () -> Unit, onSend: (List<DoodleStroke>) -> Unit) {
         }
 
         Button(
-            onClick = { onSend(strokes.toList()) },
+            onClick = { onSend(strokes.toList(), canvasSize.width, canvasSize.height) },
             enabled = strokes.isNotEmpty(),
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 12.dp),
         ) { Text("发送涂鸦（" + strokes.size + " 笔）") }

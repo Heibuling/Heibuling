@@ -40,6 +40,7 @@ import com.example.ntfypop.data.ChatRepo
 import com.example.ntfypop.data.local.Peer
 import com.example.ntfypop.data.local.Store
 import com.example.ntfypop.data.prefs.SettingsStore
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /** 常驻悬浮球：可拖动、松手吸附边缘、点击展开输入面板。 */
@@ -72,10 +73,20 @@ fun BallInputPanel(onClose: () -> Unit) {
     var text by remember { mutableStateOf("") }
     var status by remember { mutableStateOf("") }
     val focus = remember { FocusRequester() }
+    var lastPeerUid by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(peers) {
-        if (target == null || peers.none { it.uid == target?.uid }) {
-            target = peers.firstOrNull()
+    // 读取"上次发给谁"，展开面板时默认选中它（避免每次都要重新选人）
+    LaunchedEffect(Unit) {
+        lastPeerUid = settings.lastPeerUid.first()
+    }
+    LaunchedEffect(peers, lastPeerUid) {
+        if (peers.isEmpty()) {
+            target = null
+            return@LaunchedEffect
+        }
+        val current = target
+        if (current == null || peers.none { it.uid == current.uid }) {
+            target = peers.firstOrNull { it.uid == lastPeerUid } ?: peers.first()
         }
     }
     LaunchedEffect(Unit) { focus.requestFocus() }
@@ -96,7 +107,9 @@ fun BallInputPanel(onClose: () -> Unit) {
                 if (peers.size > 1) {
                     TextButton(onClick = {
                         val idx = peers.indexOfFirst { it.uid == target?.uid }
-                        target = peers[(idx + 1) % peers.size]
+                        val next = peers[(idx + 1) % peers.size]
+                        target = next
+                        scope.launch { settings.setLastPeerUid(next.uid) }
                     }) { Text("切换", fontSize = 13.sp) }
                 }
                 TextButton(onClick = onClose) { Text("收起", fontSize = 13.sp) }
@@ -127,6 +140,7 @@ fun BallInputPanel(onClose: () -> Unit) {
                     scope.launch {
                         try {
                             repo.sendText(t, body)
+                            settings.setLastPeerUid(t.uid)
                             text = ""
                             status = "已发送"
                             onClose()

@@ -267,6 +267,8 @@ class LinkService : Service() {
                             voiceDurationMs = env.blob?.dur ?: 0L,
                             voicePeaks = env.blob?.peaks ?: emptyList(),
                             doodleStrokes = inlineDoodle,
+                            doodleW = env.doodleW,
+                            doodleH = env.doodleH,
                             // 语音留 20 秒（够点播放），图片/涂鸦 9 秒，文字 5 秒
                             durationMs = when {
                                 isVoice -> Constants.VOICE_BUBBLE_DURATION_MS
