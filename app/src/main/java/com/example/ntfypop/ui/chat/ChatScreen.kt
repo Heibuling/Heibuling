@@ -204,6 +204,27 @@ fun ChatScreen(peer: Peer, onBack: () -> Unit) {
             items(list, key = { it.mid }) { m -> MessageRow(m) }
         }
 
+        // 邀请码重复的好友：禁止发送，避免消息串到别人那里
+        val conflicted = peer.conflictNote.isNotBlank()
+        if (conflicted) {
+            GlassSurface(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text(
+                        text = "⚠ 邀请码重复，已禁止发送",
+                        color = Color(0xFFFF6B6B),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                    )
+                    Text(
+                        text = "你和另一位好友共用了同一个邀请码，发出去的消息两个人都会收到。" +
+                            "回主页点这条对话可以生成新邀请码，让他重新配对。",
+                        color = Color.White.copy(alpha = 0.7f),
+                        fontSize = 11.sp,
+                    )
+                }
+            }
+        }
+
         Row(
             modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -214,12 +235,12 @@ fun ChatScreen(peer: Peer, onBack: () -> Unit) {
                         PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
                     )
                 },
-                enabled = !sendingImage && !recording,
+                enabled = !sendingImage && !recording && !conflicted,
                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
             ) { Text("图片", fontSize = 14.sp) }
             TextButton(
                 onClick = { showDoodle = true },
-                enabled = !sendingImage && !recording,
+                enabled = !sendingImage && !recording && !conflicted,
                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
             ) { Text("涂鸦", fontSize = 14.sp) }
             TextButton(
@@ -232,7 +253,7 @@ fun ChatScreen(peer: Peer, onBack: () -> Unit) {
                         if (granted) startRecording() else micPermission.launch(Manifest.permission.RECORD_AUDIO)
                     }
                 },
-                enabled = !sendingImage,
+                enabled = !sendingImage && !conflicted,
                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
             ) {
                 Text(
@@ -265,6 +286,7 @@ fun ChatScreen(peer: Peer, onBack: () -> Unit) {
             Spacer(modifier = Modifier.width(8.dp))
             Button(
                 onClick = {
+                    if (conflicted) return@Button
                     val text = input.trim()
                     if (text.isEmpty()) return@Button
                     input = ""
@@ -278,6 +300,7 @@ fun ChatScreen(peer: Peer, onBack: () -> Unit) {
                     }
                 },
                 modifier = Modifier.padding(bottom = 4.dp),
+                enabled = !conflicted,
             ) { Text("发送") }
         }
         if (status.isNotEmpty()) {

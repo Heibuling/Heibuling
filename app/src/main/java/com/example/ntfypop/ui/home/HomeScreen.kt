@@ -95,6 +95,7 @@ fun HomeScreen(onOpenChat: (Peer) -> Unit) {
     var showDebug by remember { mutableStateOf(false) }
     var showInvitePicker by remember { mutableStateOf(false) }
     var pendingToDelete by remember { mutableStateOf<String?>(null) }
+    var conflictTarget by remember { mutableStateOf<Peer?>(null) }
     var updateInfo by remember { mutableStateOf<UpdateInfo?>(null) }
     var checkingUpdate by remember { mutableStateOf(false) }
     var downloadingUpdate by remember { mutableStateOf(false) }
@@ -314,6 +315,29 @@ fun HomeScreen(onOpenChat: (Peer) -> Unit) {
             }
 
             Spacer(modifier = Modifier.height(2.dp))
+            // 邀请码重复警告：这是隐私问题，必须在最显眼处提示
+            val conflicts = peers.filter { it.conflictNote.isNotBlank() }
+            if (conflicts.isNotEmpty()) {
+                GlassSurface(
+                    modifier = Modifier.fillMaxWidth().pointerInput(Unit) {
+                        detectTapGestures(onTap = { conflictTarget = conflicts.first() })
+                    },
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text(
+                            text = "⚠ 邀请码重复（" + conflicts.size + " 个）",
+                            color = Color(0xFFFF6B6B),
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Text(
+                            text = "有好友和别人用了同一个邀请码，发给其中一人的消息另一人也会看到。点这里修复。",
+                            color = Color.White.copy(alpha = 0.7f),
+                            fontSize = 12.sp,
+                        )
+                    }
+                }
+            }
+
             GlassSectionTitle("我的好友（" + peers.size + "）")
 
             if (peers.isEmpty() && pending.isEmpty()) {
@@ -329,7 +353,13 @@ fun HomeScreen(onOpenChat: (Peer) -> Unit) {
                 GlassSurface(
                     modifier = Modifier.fillMaxWidth().pointerInput(Unit) {
                         detectTapGestures(
-                            onTap = { onOpenChat(peer) },
+                            onTap = {
+                                if (peer.conflictNote.isNotBlank()) {
+                                    conflictTarget = peer
+                                } else {
+                                    onOpenChat(peer)
+                                }
+                            },
                             onLongPress = { deleteTarget = peer },
                         )
                     },
@@ -357,8 +387,16 @@ fun HomeScreen(onOpenChat: (Peer) -> Unit) {
                                 fontWeight = FontWeight.Bold,
                             )
                             Text(
-                                text = last?.text?.take(26) ?: "点开开始聊天",
-                                color = Color.White.copy(alpha = 0.5f),
+                                text = if (peer.conflictNote.isNotBlank()) {
+                                    "⚠ 邀请码重复：与另一位好友共用同一条通道"
+                                } else {
+                                    last?.text?.take(26) ?: "点开开始聊天"
+                                },
+                                color = if (peer.conflictNote.isNotBlank()) {
+                                    Color(0xFFFF6B6B)
+                                } else {
+                                    Color.White.copy(alpha = 0.5f)
+                                },
                                 fontSize = 12.sp,
                             )
                         }
@@ -689,6 +727,63 @@ fun HomeScreen(onOpenChat: (Peer) -> Unit) {
                 }) { Text("删除") }
             },
             dismissButton = { TextButton(onClick = { pendingToDelete = null }) { Text("取消") } },
+        )
+    }
+
+    conflictTarget?.let { target ->
+        AlertDialog(
+            onDismissRequest = { conflictTarget = null },
+            title = { Text("⚠ 邀请码重复") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "「" + target.remoteName.ifBlank { "这位好友" } + "」和别人用了同一个邀请码，" +
+                            "两人共用同一条通道 —— 你发给其中一个人的消息，另一个人也会收到；他们发的消息也会混在一起。",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Text(
+                        text = "修复办法：给这个人单独生成一个新邀请码，让他重新配对一次；" +
+                            "配对成功后，把这条冲突记录删掉即可。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFFFF6B6B),
+                    )
+                    Text(
+                        text = "（这条记录目前已被禁用发送，所以不会再串消息；他的消息你仍然看得到。）",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.5f),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    conflictTarget = null
+                    scope.launch {
+                        val self = settings.ensureInitialized()
+                        val topic = Constants.TOPIC_PREFIX +
+                            EnvelopeCodec.randomCrockford(Constants.TOPIC_RANDOM_LEN)
+                        store.addPendingInvite(topic)
+                        val code = Pairing.encode(
+                            Pairing.Invite(sv = self.serverUrl, tp = topic, uid = self.uid, nm = self.name),
+                        )
+                        inviteCode = code
+                        copyToClipboard(context, code)
+                        status = "新邀请码已复制：单独发给「" + target.remoteName.ifBlank { "他" } +
+                            "」，让他在 App 里粘贴重新配对"
+                    }
+                }) { Text("生成新邀请码") }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = {
+                        conflictTarget = null
+                        scope.launch {
+                            store.removePeerAndMessages(target.uid)
+                            status = "已删除这条冲突记录"
+                        }
+                    }) { Text("删除记录") }
+                    TextButton(onClick = { conflictTarget = null }) { Text("稍后") }
+                }
+            },
         )
     }
 

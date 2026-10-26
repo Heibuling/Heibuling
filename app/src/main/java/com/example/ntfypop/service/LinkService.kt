@@ -181,6 +181,7 @@ class LinkService : Service() {
 
         when (env.k) {
             Envelope.KIND_HELLO -> {
+                warnIfTopicConflict(applicationContext, topic, env.from, env.name)
                 Log.i(Constants.LOG_TAG, "收到 hello，建立好友: " + env.name)
                 scope.launch {
                     store.removePendingInvite(topic)
@@ -198,6 +199,7 @@ class LinkService : Service() {
 
             Envelope.KIND_MSG -> {
                 Log.i(Constants.LOG_TAG, "收到消息 kind=" + env.kind + " from=" + env.name)
+                warnIfTopicConflict(applicationContext, topic, env.from, env.name)
                 NotificationFactory.onMessageReceived()
                 scope.launch {
                     store.upsertPeer(
@@ -373,6 +375,27 @@ class LinkService : Service() {
             }
         }
     }
+
+    /**
+     * 同一条通道上有第二个人（邀请码被多人使用）时给出明确提醒。
+     * 这种情况必须让用户重新配对，否则发给 A 的消息 B 也能看到。
+     */
+    private fun warnIfTopicConflict(context: Context, topic: String, fromUid: String, name: String) {
+        val owner = store.topicOwnerUid(topic) ?: return
+        if (owner == fromUid) return
+        Log.w(
+            Constants.LOG_TAG,
+            "邀请码重复：topic " + maskTopic(topic) + " 已属于 " + owner + "，又收到 " + fromUid + " 的消息",
+        )
+        NotificationFactory.postFallback(
+            context,
+            "⚠ 邀请码重复",
+            name.ifBlank { "有人" } + " 和另一个好友用了同一个邀请码，你们三人的消息会互相可见。请打开 App 给他单独发一个新邀请码重新配对。",
+        )
+    }
+
+    private fun maskTopic(topic: String): String =
+        if (topic.length <= 6) "***" else topic.substring(0, 6) + "***"
 
     private fun updateNotification(name: String, connected: Boolean) {
         try {

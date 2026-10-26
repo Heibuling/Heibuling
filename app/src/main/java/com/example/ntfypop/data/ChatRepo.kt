@@ -14,6 +14,10 @@ class ChatRepo(
 ) {
     /** 发送一条文字/emoji 消息：先落库（sending），发布成功后改 sent，失败改 failed。 */
     suspend fun sendText(peer: Peer, text: String, kind: String = Envelope.KIND_TEXT): MessageRec {
+        if (peer.topic.isBlank()) {
+            throw java.io.IOException("这条通道已被别人占用（邀请码重复），请重新配对后再发送")
+        }
+
         val self = settings.ensureInitialized()
         val mid = EnvelopeCodec.newMid()
         val rec = MessageRec(
@@ -56,6 +60,10 @@ class ChatRepo(
      * 第一段 PUT 上传文件拿到附件 URL，第二段 POST 信封引用它。
      */
     suspend fun sendImage(peer: Peer, bytes: ByteArray, filename: String, mime: String): MessageRec {
+        if (peer.topic.isBlank()) {
+            throw java.io.IOException("这条通道已被别人占用（邀请码重复），请重新配对后再发送")
+        }
+
         val self = settings.ensureInitialized()
         val mid = EnvelopeCodec.newMid()
         val rec = MessageRec(
@@ -100,6 +108,9 @@ class ChatRepo(
 
     /** 发送语音：两段式发布（先上传 m4a，再发信封带上时长与波形）。 */
     suspend fun sendVoice(peer: Peer, file: java.io.File, durationMs: Long, peaks: List<Float>): MessageRec {
+        if (peer.topic.isBlank()) {
+            throw java.io.IOException("这条通道已被别人占用（邀请码重复），请重新配对后再发送")
+        }
         val self = settings.ensureInitialized()
         val mid = EnvelopeCodec.newMid()
         val rec = MessageRec(
@@ -152,6 +163,9 @@ class ChatRepo(
         canvasW: Int = 0,
         canvasH: Int = 0,
     ): MessageRec {
+        if (peer.topic.isBlank()) {
+            throw java.io.IOException("这条通道已被别人占用（邀请码重复），请重新配对后再发送")
+        }
         val self = settings.ensureInitialized()
         val mid = EnvelopeCodec.newMid()
         val rec = MessageRec(

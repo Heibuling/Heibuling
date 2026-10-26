@@ -202,7 +202,8 @@ fun DevModeScreen(onClose: () -> Unit) {
                 peers.forEach { p ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = p.remoteName + "  →  " + p.topic,
+                            text = p.remoteName + "  →  " + (if (p.topic.isBlank()) "（未绑定通道）" else p.topic) +
+                                "\nuid=" + p.uid + (if (p.conflictNote.isNotBlank()) "\n⚠ 邀请码重复（原通道 " + p.conflictNote.take(8) + "…）" else ""),
                             fontSize = 12.sp,
                             modifier = Modifier.weight(1f),
                         )

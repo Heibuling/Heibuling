@@ -17,6 +17,11 @@ data class Peer(
     val localAlias: String = "",
     val createdAt: Long = 0L,
     val lastSeenAt: Long = 0L,
+    /**
+     * 非空表示"邀请码重复"：这个好友本该用某个 topic，但那个 topic 已经被另一个好友占用，
+     * 所以这里不绑定通道（topic 置空），仅保留记录与提示，避免消息串到别人那里。
+     */
+    val conflictNote: String = "",
 )
 
 @Serializable
@@ -78,9 +83,29 @@ class Store private constructor(context: Context) {
     suspend fun load() {
         mutex.withLock {
             if (loaded) return
-            db = read()
+            db = read().let { it.copy(peers = repaired(it.peers)) }
             loaded = true
+            persist()
             publish()
+        }
+    }
+
+    /**
+     * 修复历史数据：同一个 topic 上如果有多个好友（都是同一个邀请码被多人使用造成的），
+     * 只保留最早创建的那个作为通道主人，其余解除绑定并标记冲突。
+     */
+    private fun repaired(peers: List<Peer>): List<Peer> {
+        if (peers.isEmpty()) return peers
+        val owner = HashMap<String, String>()
+        peers.filter { it.topic.isNotBlank() }
+            .sortedBy { it.createdAt }
+            .forEach { p -> owner.putIfAbsent(p.topic, p.uid) }
+        return peers.map { p ->
+            when {
+                p.topic.isBlank() -> p
+                owner[p.topic] == p.uid -> p
+                else -> p.copy(topic = "", conflictNote = p.topic)
+            }
         }
     }
 
@@ -116,17 +141,36 @@ class Store private constructor(context: Context) {
     }
 
     /** hello 幂等：同一个 uid 只更新不新增。 */
+    /** 某个 topic 当前绑定的好友 uid（没有则 null）。 */
+    fun topicOwnerUid(topic: String): String? =
+        db.peers.firstOrNull { it.topic == topic && it.topic.isNotBlank() }?.uid
+
+    /**
+     * 一条通道只允许绑一个好友。
+     * 若这个 topic 已属于别人（典型场景：同一个邀请码给了两个人），
+     * **拒绝绑定**并标记为"邀请码重复"，避免发消息时同时到达两个人。
+     */
     suspend fun upsertPeer(peer: Peer) {
         mutex.withLock {
-            val existing = db.peers.firstOrNull { it.uid == peer.uid }
+            val ownerUid = db.peers.firstOrNull {
+                it.topic == peer.topic && it.topic.isNotBlank() && it.uid != peer.uid
+            }?.uid
+            val incoming = if (ownerUid != null && peer.topic.isNotBlank()) {
+                peer.copy(topic = "", conflictNote = peer.topic)
+            } else {
+                peer
+            }
+            val existing = db.peers.firstOrNull { it.uid == incoming.uid }
             val next = if (existing == null) {
-                db.peers + peer
+                db.peers + incoming
             } else {
                 db.peers.map {
-                    if (it.uid == peer.uid) {
+                    if (it.uid == incoming.uid) {
                         it.copy(
-                            topic = peer.topic.ifBlank { it.topic },
-                            remoteName = peer.remoteName.ifBlank { it.remoteName },
+                            // 冲突时要把已绑定的通道解除，绝不能继续共用
+                            topic = if (incoming.conflictNote.isNotBlank()) "" else incoming.topic.ifBlank { it.topic },
+                            conflictNote = incoming.conflictNote.ifBlank { it.conflictNote },
+                            remoteName = incoming.remoteName.ifBlank { it.remoteName },
                             lastSeenAt = System.currentTimeMillis(),
                         )
                     } else {
@@ -134,7 +178,7 @@ class Store private constructor(context: Context) {
                     }
                 }
             }
-            db = db.copy(peers = next)
+            db = db.copy(peers = repaired(next))
             persist()
             publish()
         }
