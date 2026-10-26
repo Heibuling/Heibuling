@@ -1,6 +1,6 @@
 {
-  "versionCode": 9,
-  "versionName": "0.2.7",
-  "apkUrl": "https://github.com/Heibuling/Heibuling/releases/download/v0.2.7/Heibuling-v0.2.7.apk",
-  "notes": "v0.2.7：修键盘遮挡输入框、涂鸦被压扁、悬浮球面板不记发送对象、关闭后又自动打开、侧滑收不起面板；聊天记录新增发送时间。"
+  "versionCode": 10,
+  "versionName": "0.2.8",
+  "apkUrl": "https://github.com/Heibuling/Heibuling/releases/download/v0.2.8/Heibuling-v0.2.8.apk",
+  "notes": "v0.2.8：修复同一邀请码被多人使用导致的隐私串消息（一条通道只允许一个好友，冲突者可一键重新配对）。"
 }
